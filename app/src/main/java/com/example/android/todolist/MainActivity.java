@@ -1,18 +1,18 @@
 /*
-* Copyright (C) 2016 The Android Open Source Project
-*
-* Licensed under the Apache License, Version 2.0 (the "License");
-* you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
-*
-*      http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Copyright (C) 2016 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package com.example.android.todolist;
 
@@ -26,6 +26,12 @@ import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.helper.ItemTouchHelper;
 import android.view.View;
 
+import com.example.android.todolist.database.AppDatabase;
+import com.example.android.todolist.database.AppExecutor;
+import com.example.android.todolist.database.TaskEntry;
+
+import java.util.List;
+
 import static android.support.v7.widget.DividerItemDecoration.VERTICAL;
 
 
@@ -33,6 +39,7 @@ public class MainActivity extends AppCompatActivity implements TaskAdapter.ItemC
 
     // Constant for logging
     private static final String TAG = MainActivity.class.getSimpleName();
+    AppDatabase mDatabase;
     // Member variables for the adapter and RecyclerView
     private RecyclerView mRecyclerView;
     private TaskAdapter mAdapter;
@@ -41,7 +48,7 @@ public class MainActivity extends AppCompatActivity implements TaskAdapter.ItemC
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
+        mDatabase = AppDatabase.getInstance(getApplicationContext());
         // Set the RecyclerView to its corresponding view
         mRecyclerView = findViewById(R.id.recyclerViewTasks);
 
@@ -69,7 +76,17 @@ public class MainActivity extends AppCompatActivity implements TaskAdapter.ItemC
 
             // Called when a user swipes left or right on a ViewHolder
             @Override
-            public void onSwiped(RecyclerView.ViewHolder viewHolder, int swipeDir) {
+            public void onSwiped(final RecyclerView.ViewHolder viewHolder, int swipeDir) {
+
+                final List<TaskEntry> taskEntry = mAdapter.getTask();
+                AppExecutor.getInstance().diskIO().execute(new Runnable() {
+                    @Override
+                    public void run() {
+                        mDatabase.taskDao().deleteTask(taskEntry.get(viewHolder.getAdapterPosition()));
+                        retrieveTask();
+                    }
+                });
+
                 // Here is where you'll implement swipe to delete
             }
         }).attachToRecyclerView(mRecyclerView);
@@ -92,7 +109,32 @@ public class MainActivity extends AppCompatActivity implements TaskAdapter.ItemC
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        retrieveTask();
+
+    }
+
+    private void retrieveTask() {
+        AppExecutor.getInstance().diskIO().execute(new Runnable() {
+            @Override
+            public void run() {
+                final List<TaskEntry> taskEntries = mDatabase.taskDao().loadAllTasks();
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        mAdapter.setTasks(taskEntries);
+                    }
+                });
+            }
+        });
+    }
+
+    @Override
     public void onItemClickListener(int itemId) {
         // Launch AddTaskActivity adding the itemId as an extra in the intent
+        Intent intent = new Intent(getApplicationContext(), AddTaskActivity.class);
+        intent.putExtra(AddTaskActivity.EXTRA_TASK_ID, itemId);
+        startActivity(intent);
     }
 }
